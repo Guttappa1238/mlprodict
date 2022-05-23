@@ -322,17 +322,45 @@ def change_input_type(onx, changes):
     return onnx_model
 
 
-def change_subgraph_io_type(onx, changes, recursive=True):
+def _change_subgraph_io_type_shape_list(io_list, type_changes, shape_changes):
+    ms = False
+    new_inputs = []
+    for inp in io_list:
+        m = False
+        if inp.name in shape_changes:
+            shape = shape_changes[inp.name]
+            m = True
+        else:
+            shape = get_tensor_shape(inp)
+
+        if inp.name in type_changes:
+            ntype = type_changes[inp.name]
+            m = True
+        else:
+            ntype = get_tensor_elem_type(inp)
+        if m:
+            ms = True
+            value_info = make_tensor_value_info(inp.name, ntype, shape)
+            new_inputs.append(value_info)
+        else:
+            new_inputs.append(inp)
+    return new_inputs if ms else None
+
+
+def change_subgraph_io_type_shape(onx, type_changes=None, shape_changes=None,
+                                  recursive=True):
     """
     Changes the type of an input or an output of a subgraph.
 
     :param onx: ModelProto, GraphProto
-    :param changes: dictionary '{ name: new proto element type }`
+    :param type_changes: dictionary '{ name: new proto element type }`
+    :param shape_changes: dictionary '{ name: new shape }`
     :param recursive: True
     :return: new onx
     """
     if isinstance(onx, ModelProto):
-        graph = change_subgraph_io_type(onx.graph, changes)
+        graph = change_subgraph_io_type_shape(
+            onx.graph, type_changes, shape_changes, recursive)
         onnx_model = make_model(graph, functions=onx.functions)
         onnx_model.ir_version = onx.ir_version
         onnx_model.producer_name = onx.producer_name
@@ -352,23 +380,15 @@ def change_subgraph_io_type(onx, changes, recursive=True):
         return onnx_model
 
     graph = onx
-    new_inputs = []
-    for inp in graph.input:
-        if inp.name not in changes:
-            new_inputs.append(inp)
-            continue
-        value_info = make_tensor_value_info(
-            inp.name, changes[inp.name], None)
-        new_inputs.append(value_info)
+    new_inputs = _change_subgraph_io_type_shape_list(
+        graph.input, type_changes or {}, shape_changes or {})
+    if new_inputs is None:
+        new_inputs = graph.input
 
-    new_outputs = []
-    for inp in graph.output:
-        if inp.name not in changes:
-            new_outputs.append(inp)
-            continue
-        value_info = make_tensor_value_info(
-            inp.name, changes[inp.name], None)
-        new_outputs.append(value_info)
+    new_outputs = _change_subgraph_io_type_shape_list(
+        graph.output, type_changes or {}, shape_changes or {})
+    if new_outputs is None:
+        new_outputs = graph.output
 
     # recursive
     if recursive:
@@ -380,8 +400,9 @@ def change_subgraph_io_type(onx, changes, recursive=True):
                 if (att.type == AttributeProto.GRAPH and
                         hasattr(att, 'g') and att.g is not None):
                     modified = True
-                    g = change_subgraph_io_type(att.g, changes,
-                                                recursive=recursive)
+                    g = change_subgraph_io_type_shape(
+                            att.g, type_changes, shape_changes,
+                            recursive=recursive)
                     att = make_attribute(att.name, g)
                 atts.append(att)
             if modified:

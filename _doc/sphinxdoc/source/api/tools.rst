@@ -36,7 +36,7 @@ Functions to help understand models or modify them.
 
 .. autosignature:: mlprodict.onnx_tools.onnx_manipulations.change_input_type
 
-.. autosignature:: mlprodict.onnx_tools.onnx_manipulations.change_subgraph_io_type
+.. autosignature:: mlprodict.onnx_tools.onnx_manipulations.change_subgraph_io_type_shape
 
 .. autosignature:: mlprodict.onnx_tools.onnx_manipulations.insert_results_into_onnx
 
